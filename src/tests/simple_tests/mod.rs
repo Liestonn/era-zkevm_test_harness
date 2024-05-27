@@ -15,5 +15,5 @@ mod memory_growth;
 mod near_call;
 mod ptr;
 mod stack;
-
 mod storage;
+mod uma;
