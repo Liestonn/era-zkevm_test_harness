@@ -5,7 +5,6 @@ pub mod complex_tests;
 pub mod run_manually;
 #[cfg(test)]
 pub mod simple_tests;
-#[cfg(test)]
 pub(crate) mod utils;
 
 use crate::blake2::Blake2s256;
@@ -21,6 +20,7 @@ use crate::zk_evm::testing::storage::InMemoryStorage;
 use circuit_definitions::circuit_definitions::base_layer::ZkSyncBaseLayerCircuit;
 use circuit_definitions::circuit_definitions::recursion_layer::ZkSyncRecursiveLayerCircuit;
 use circuit_definitions::ZkSyncDefaultRoundFunction;
+use utils::storage::InMemoryCustomRefundStorage;
 use std::alloc::Global;
 use std::collections::HashMap;
 
@@ -35,7 +35,7 @@ const KNOWN_CODE_HASHES_ADDRESS: Address = H160([
 ]);
 
 pub(crate) fn save_predeployed_contracts(
-    storage: &mut InMemoryStorage,
+    storage: &mut InMemoryCustomRefundStorage,
     tree: &mut impl BinarySparseStorageTree<256, 32, 32, 8, 32, Blake2s256, ZkSyncStorageLeaf>,
     contracts: &HashMap<Address, Vec<[u8; 32]>>,
 ) {

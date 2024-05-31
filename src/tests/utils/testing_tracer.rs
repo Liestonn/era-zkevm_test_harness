@@ -2,7 +2,10 @@ use circuit_definitions::boojum::utils::PipeOp;
 use circuit_definitions::ethereum_types::H160;
 use circuit_definitions::zk_evm::vm_state::ErrorFlags;
 use circuit_definitions::zk_evm::vm_state::PrimitiveValue;
+use zkevm_assembly::zkevm_opcode_defs::REGISTERS_COUNT;
 use std::fmt;
+use std::sync::Arc;
+use std::sync::Mutex;
 use std::usize;
 use zkevm_assembly::zkevm_opcode_defs::decoding::{
     AllowedPcOrImm, EncodingModeProduction, VmEncodingMode,
@@ -88,6 +91,8 @@ pub struct TestingTracer<const N: usize = 8, E: VmEncodingMode<N> = EncodingMode
     tracer_state: TracerState,
     /// stores pending messages that should be printed
     message_buffer: Option<String>,
+    /// Optional values pulled from registers 14 & 15 to force refund type
+    test_refund_register_val: Option<Arc<Mutex<(u32, u32)>>>,
 }
 
 /// TestingTracer interprets valid x values in `add x r0 r0` and `ptr.add x r0 r0` instructions as commands to execute.
@@ -98,11 +103,12 @@ pub struct TestingTracer<const N: usize = 8, E: VmEncodingMode<N> = EncodingMode
 /// "PRINT_REG_PREFIX:" - print raw "x" value of next command in the console
 /// "PRINT_PTR_PREFIX:" - print raw "x" pointer value of next command in the console (currently same result as previous command)
 impl<const N: usize, E: VmEncodingMode<N>> TestingTracer<N, E> {
-    pub fn new() -> Self {
+    pub fn new(test_refund_register_val: Option<Arc<Mutex<(u32, u32)>>>) -> Self {
         Self {
             exception: None,
             tracer_state: TracerState::default(),
             message_buffer: None,
+            test_refund_register_val,
         }
     }
 
@@ -265,10 +271,26 @@ impl<const N: usize, E: VmEncodingMode<N>> Tracer<N, E> for TestingTracer<N, E> 
 
     fn before_execution(
         &mut self,
-        _state: VmLocalStateData<'_, N, E>,
+        state: VmLocalStateData<'_, N, E>,
         data: BeforeExecutionData<N, E>,
         _memory: &Self::SupportedMemory,
     ) {
+        let reg_14_val = state.vm_local_state.registers.get(REGISTERS_COUNT - 2)
+            .unwrap()
+            .value;
+
+        let reg_15_val = state.vm_local_state.registers.last()
+            .unwrap()
+            .value;
+
+        if let Some(val) = &self.test_refund_register_val {
+            *val.lock().unwrap() = if reg_15_val > U256::from(u32::MAX) {
+                (reg_14_val.as_u32(), u32::MAX)
+            } else {
+                (reg_14_val.as_u32(), reg_15_val.as_u32())
+            };
+        }
+
         let inner_opcode = data.opcode.inner.variant.opcode;
 
         // Propagate error message if Nop, ret.panic, ret.revert; reset otherwise

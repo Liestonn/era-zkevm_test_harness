@@ -176,7 +176,7 @@ pub(crate) fn generate_base_layer(
     use crate::external_calls::run;
     use crate::toolset::GeometryConfig;
 
-    let mut storage_impl = InMemoryStorage::new();
+    let mut storage_impl = InMemoryCustomRefundStorage::new(None);
     let mut tree = ZKSyncTestingTree::empty();
 
     test_artifact.entry_point_address =

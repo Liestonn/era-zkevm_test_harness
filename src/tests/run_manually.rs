@@ -1,4 +1,6 @@
+use std::borrow::BorrowMut;
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 use super::*;
 use crate::entry_point::create_out_of_circuit_global_context;
@@ -22,6 +24,8 @@ use crate::zkevm_circuits::base_structures::vm_state::GlobalContextWitness;
 use crate::zkevm_circuits::main_vm::main_vm_entry_point;
 use circuit_definitions::aux_definitions::witness_oracle::VmWitnessOracle;
 use circuit_definitions::zk_evm::vm_state::cycle;
+use utils::storage::InMemoryCustomRefundStorage;
+use utils::testing_tracer::TestingTracer;
 use zkevm_assembly::Assembly;
 
 #[test]
@@ -214,7 +218,7 @@ pub(crate) fn run_and_try_create_witness_for_extended_state(
 
 pub(crate) fn run_with_options(entry_point_bytecode: Vec<[u8; 32]>, options: Options) {
     use crate::run_vms::{run_vms, RunVmError};
-    use crate::tests::utils::testing_tracer::TestingTracer;
+    // use crate::tests::utils::testing_tracer::TestingTracer;
     use crate::toolset::GeometryConfig;
     use crate::zk_evm::zkevm_opcode_defs::system_params::BOOTLOADER_FORMAL_ADDRESS;
 
@@ -249,7 +253,9 @@ pub(crate) fn run_with_options(entry_point_bytecode: Vec<[u8; 32]>, options: Opt
     // We must pass a correct empty code hash (with proper version) into the run method.
     let empty_code_hash = U256::from_big_endian(&bytecode_to_code_hash(&[[0; 32]]).unwrap());
 
-    let mut storage_impl = InMemoryStorage::new();
+    let slot_refund = Arc::new(Mutex::new((0u32, 0u32)));
+    let mut storage_impl = InMemoryCustomRefundStorage::new(Some(slot_refund.clone()));
+
     let mut tree = ZKSyncTestingTree::empty();
 
     let mut known_contracts = HashMap::new();
@@ -260,7 +266,7 @@ pub(crate) fn run_with_options(entry_point_bytecode: Vec<[u8; 32]>, options: Opt
     let mut basic_block_circuits = vec![];
 
     // we are using TestingTracer to track prints and exceptions inside out_of_circuit_vm cycles
-    let mut out_of_circuit_tracer = TestingTracer::new();
+    let mut out_of_circuit_tracer = TestingTracer::new(Some(slot_refund));
 
     if let Err(err) = run_vms(
         Address::zero(),
@@ -287,7 +293,7 @@ pub(crate) fn run_with_options(entry_point_bytecode: Vec<[u8; 32]>, options: Opt
                 format!("Invalid input error: {msg}")
             }
             RunVmError::OutOfCircuitExecutionError(_) => {
-                let msg = if let Some(exception) = out_of_circuit_tracer.exception {
+                let msg = if let Some(exception) = &out_of_circuit_tracer.exception {
                     format!("root frame ended up with exception: {}", exception)
                 } else {
                     format!("root frame ended up with unexpected panic")
