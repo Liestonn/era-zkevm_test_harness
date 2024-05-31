@@ -6,11 +6,9 @@
     .globl __entry
 __entry:
 .main:
-    ; allocate 20k gas for 2 writes
+    ; allocate 20k gas for 2 writes and 2 reads
     ; each write takes about 5k gas
-    ; add 20000, r0, r4
-    ; 200k
-    add 500000, r0, r4
+    add 20000, r0, r4
     
     ; perform write via near call
     near_call r4, @inner_s_write, @.panic

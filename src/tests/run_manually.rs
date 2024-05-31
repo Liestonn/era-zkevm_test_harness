@@ -25,7 +25,6 @@ use crate::zkevm_circuits::main_vm::main_vm_entry_point;
 use circuit_definitions::aux_definitions::witness_oracle::VmWitnessOracle;
 use circuit_definitions::zk_evm::vm_state::cycle;
 use utils::storage::InMemoryCustomRefundStorage;
-use utils::testing_tracer::TestingTracer;
 use zkevm_assembly::Assembly;
 
 #[test]
@@ -218,7 +217,7 @@ pub(crate) fn run_and_try_create_witness_for_extended_state(
 
 pub(crate) fn run_with_options(entry_point_bytecode: Vec<[u8; 32]>, options: Options) {
     use crate::run_vms::{run_vms, RunVmError};
-    // use crate::tests::utils::testing_tracer::TestingTracer;
+    use crate::tests::utils::testing_tracer::TestingTracer;
     use crate::toolset::GeometryConfig;
     use crate::zk_evm::zkevm_opcode_defs::system_params::BOOTLOADER_FORMAL_ADDRESS;
 
