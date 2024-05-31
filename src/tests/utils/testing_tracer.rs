@@ -2,7 +2,6 @@ use circuit_definitions::boojum::utils::PipeOp;
 use circuit_definitions::ethereum_types::H160;
 use circuit_definitions::zk_evm::vm_state::ErrorFlags;
 use circuit_definitions::zk_evm::vm_state::PrimitiveValue;
-use zkevm_assembly::zkevm_opcode_defs::REGISTERS_COUNT;
 use std::fmt;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -16,6 +15,7 @@ use zkevm_assembly::zkevm_opcode_defs::NopOpcode;
 use zkevm_assembly::zkevm_opcode_defs::Opcode;
 use zkevm_assembly::zkevm_opcode_defs::PtrOpcode;
 use zkevm_assembly::zkevm_opcode_defs::RetOpcode;
+use zkevm_assembly::zkevm_opcode_defs::REGISTERS_COUNT;
 
 use crate::ethereum_types::U256;
 use crate::zk_evm::reference_impls::memory::SimpleMemory;
@@ -275,13 +275,14 @@ impl<const N: usize, E: VmEncodingMode<N>> Tracer<N, E> for TestingTracer<N, E> 
         data: BeforeExecutionData<N, E>,
         _memory: &Self::SupportedMemory,
     ) {
-        let reg_14_val = state.vm_local_state.registers.get(REGISTERS_COUNT - 2)
+        let reg_14_val = state
+            .vm_local_state
+            .registers
+            .get(REGISTERS_COUNT - 2)
             .unwrap()
             .value;
 
-        let reg_15_val = state.vm_local_state.registers.last()
-            .unwrap()
-            .value;
+        let reg_15_val = state.vm_local_state.registers.last().unwrap().value;
 
         if let Some(val) = &self.test_refund_register_val {
             *val.lock().unwrap() = if reg_15_val > U256::from(u32::MAX) {

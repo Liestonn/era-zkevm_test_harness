@@ -20,9 +20,9 @@ use crate::zk_evm::testing::storage::InMemoryStorage;
 use circuit_definitions::circuit_definitions::base_layer::ZkSyncBaseLayerCircuit;
 use circuit_definitions::circuit_definitions::recursion_layer::ZkSyncRecursiveLayerCircuit;
 use circuit_definitions::ZkSyncDefaultRoundFunction;
-use utils::storage::InMemoryCustomRefundStorage;
 use std::alloc::Global;
 use std::collections::HashMap;
+use utils::storage::InMemoryCustomRefundStorage;
 
 const ACCOUNT_CODE_STORAGE_ADDRESS: Address = H160([
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,

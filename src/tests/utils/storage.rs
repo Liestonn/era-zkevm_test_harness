@@ -1,23 +1,37 @@
-use std::{collections::{HashMap, HashSet}, sync::{Arc, Mutex}};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::{Arc, Mutex},
+};
 
-use circuit_definitions::{ethereum_types::{Address, H160}, zk_evm::{
-    abstractions::{Storage, StorageAccessRefund},
-    aux_structures::{LogQuery, PubdataCost, Timestamp},
-    reference_impls::{event_sink::ApplicationData, memory::SimpleMemory},
-    testing::{storage::InMemoryStorage, NUM_SHARDS},
-    tracing::{AfterDecodingData, AfterExecutionData, BeforeExecutionData, Tracer, VmLocalStateData}, vm_state::PrimitiveValue,
-}};
+use circuit_definitions::{
+    ethereum_types::{Address, H160},
+    zk_evm::{
+        abstractions::{Storage, StorageAccessRefund},
+        aux_structures::{LogQuery, PubdataCost, Timestamp},
+        reference_impls::{event_sink::ApplicationData, memory::SimpleMemory},
+        testing::{storage::InMemoryStorage, NUM_SHARDS},
+        tracing::{
+            AfterDecodingData, AfterExecutionData, BeforeExecutionData, Tracer, VmLocalStateData,
+        },
+        vm_state::PrimitiveValue,
+    },
+};
 use zkevm_assembly::zkevm_opcode_defs::{
-    decoding::{AllowedPcOrImm, EncodingModeProduction, VmEncodingMode}, AddOpcode, DecodedOpcode, NopOpcode, Opcode, PtrOpcode, RetOpcode, MAX_PUBDATA_COST_PER_QUERY, STORAGE_ACCESS_COLD_READ_COST, STORAGE_ACCESS_COLD_WRITE_COST, STORAGE_ACCESS_WARM_READ_COST, STORAGE_ACCESS_WARM_WRITE_COST, STORAGE_AUX_BYTE, TRANSIENT_STORAGE_AUX_BYTE
+    decoding::{AllowedPcOrImm, EncodingModeProduction, VmEncodingMode},
+    AddOpcode, DecodedOpcode, NopOpcode, Opcode, PtrOpcode, RetOpcode, MAX_PUBDATA_COST_PER_QUERY,
+    STORAGE_ACCESS_COLD_READ_COST, STORAGE_ACCESS_COLD_WRITE_COST, STORAGE_ACCESS_WARM_READ_COST,
+    STORAGE_ACCESS_WARM_WRITE_COST, STORAGE_AUX_BYTE, TRANSIENT_STORAGE_AUX_BYTE,
 };
 
 use crate::ethereum_types::U256;
 
-use super::{preprocess_asm::{EXCEPTION_PREFIX, PRINT_PREFIX, PRINT_PTR_PREFIX, PRINT_REG_PREFIX}, testing_tracer::{OutOfCircuitException, TestingTracer}};
+use super::{
+    preprocess_asm::{EXCEPTION_PREFIX, PRINT_PREFIX, PRINT_PTR_PREFIX, PRINT_REG_PREFIX},
+    testing_tracer::{OutOfCircuitException, TestingTracer},
+};
 
 #[derive(Debug, Clone)]
-pub struct InMemoryCustomRefundStorage
-{
+pub struct InMemoryCustomRefundStorage {
     pub inner: [HashMap<Address, HashMap<U256, U256>>; NUM_SHARDS],
     pub inner_transient: [HashMap<Address, HashMap<U256, U256>>; NUM_SHARDS],
     pub cold_warm_markers: [HashMap<Address, HashSet<U256>>; NUM_SHARDS],
@@ -54,18 +68,18 @@ impl Storage for InMemoryCustomRefundStorage {
         _monotonic_cycle_counter: u32,
         _partial_query: &LogQuery,
     ) -> StorageAccessRefund {
-            match &self.slot_refund {
-                None => StorageAccessRefund::Cold,
-                Some(val) => {
-                    let (is_warm, val) = *val.lock().unwrap();
+        match &self.slot_refund {
+            None => StorageAccessRefund::Cold,
+            Some(val) => {
+                let (is_warm, val) = *val.lock().unwrap();
 
-                    if is_warm == 0 {
-                        dbg!(StorageAccessRefund::Cold)
-                    } else {
-                        dbg!(StorageAccessRefund::Warm { ergs: val })
-                    }
+                if is_warm == 0 {
+                    dbg!(StorageAccessRefund::Cold)
+                } else {
+                    dbg!(StorageAccessRefund::Warm { ergs: val })
                 }
             }
+        }
     }
 
     #[track_caller]
@@ -200,4 +214,3 @@ impl Storage for InMemoryCustomRefundStorage {
         }
     }
 }
-
