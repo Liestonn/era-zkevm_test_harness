@@ -292,11 +292,11 @@ pub(crate) fn run_with_options(entry_point_bytecode: Vec<[u8; 32]>, options: Opt
             RunVmError::InvalidInput(msg) => {
                 format!("Invalid input error: {msg}")
             }
-            RunVmError::OutOfCircuitExecutionError(_) => {
-                let msg = if let Some(exception) = &out_of_circuit_tracer.exception {
-                    format!("root frame ended up with exception: {}", exception)
+            RunVmError::OutOfCircuitExecutionError(msg) => {
+                let msg = if let Some(exception) = out_of_circuit_tracer.exception {
+                    format!("{msg} {exception}")
                 } else {
-                    format!("root frame ended up with unexpected panic")
+                    msg
                 };
                 format!("Out-of-circuit execution error: {msg}")
             }
