@@ -11,10 +11,10 @@ __entry:
     add 20000, r0, r4
     
     ; perform write via near call
-    near_call r4, @inner_s_write, @.panic
+    near_call r4, @inner_storage_handler, @.panic
 
     ret.ok r0
-inner_s_write:
+inner_storage_handler:
     ; prepare a 32-bit mask (0xffff..)
     add 1, r0, r10
     shl.s 32, r10, r10
