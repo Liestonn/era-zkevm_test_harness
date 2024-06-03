@@ -27,34 +27,22 @@ inner_s_write:
     jump.ne @.panic
 
     ; we'll be writing 13 at slot 25 with a warm refund of 5400
-    ; setting r14 to 1 indicates warm storage access
-    ; setting r15 to 5400 indicates a refund with that amount
-    add 1, r0, r14
-    add 5400, r0, r15
+    set_storage_warm(5400)
     add 25, r0, r1
     add 13, r0, r2
     log.swrite r1, r2, r0
 
-    ; we'll be writing 19 at slot 25
-    ; setting r14 to 0 indicates cold storage access
-    ; resetting r15 to cleanup last refund
-    add 0, r0, r14
-    add 0, r0, r15
+    ; we'll be writing 19 at slot 25 with a cold storage refund
+    set_storage_cold()
     add 19, r0, r2
     log.swrite r1, r2, r0
 
     ; read slot 25 with a warm refund of 1900
-    ; setting r14 to 1 indicates warm storage access
-    ; setting r15 to 1900 indicates a refund with that amount
-    add 1, r0, r14
-    add 1900, r0, r15
+    set_storage_warm(1900)
     log.sread r1, r0, r5
 
-    ; read slot 19
-    ; setting r14 to 0 indicates cold storage access
-    ; resetting r15 to cleanup last refund
-    add 0, r0, r14
-    add 0, r0, r15
+    ; read slot 19 with a cold storage refund
+    set_storage_cold()
     add 19, r0, r1
     log.sread r1, r0, r6
 

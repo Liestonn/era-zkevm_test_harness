@@ -2,7 +2,9 @@ use circuit_definitions::boojum::utils::PipeOp;
 use circuit_definitions::ethereum_types::H160;
 use circuit_definitions::zk_evm::vm_state::ErrorFlags;
 use circuit_definitions::zk_evm::vm_state::PrimitiveValue;
+use regex::Regex;
 use std::fmt;
+use std::str;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::usize;
@@ -25,6 +27,10 @@ use crate::tests::utils::preprocess_asm::EXCEPTION_PREFIX;
 use crate::tests::utils::preprocess_asm::PRINT_PREFIX;
 use crate::tests::utils::preprocess_asm::PRINT_PTR_PREFIX;
 use crate::tests::utils::preprocess_asm::PRINT_REG_PREFIX;
+
+use super::preprocess_asm::STORAGE_REFUND_COLD_PREFIX;
+use super::preprocess_asm::STORAGE_REFUND_WARM_PREFIX;
+use super::StorageRefund;
 
 #[derive(Debug, Clone, PartialEq, Default)]
 enum TracerState {
@@ -91,8 +97,8 @@ pub struct TestingTracer<const N: usize = 8, E: VmEncodingMode<N> = EncodingMode
     tracer_state: TracerState,
     /// stores pending messages that should be printed
     message_buffer: Option<String>,
-    /// Optional values pulled from registers 14 & 15 to force refund type
-    test_refund_register_val: Option<Arc<Mutex<(u32, u32)>>>,
+    /// Optional values pulled from assembly code denoting the storage refund and amount
+    test_refund_register_val: Option<Arc<Mutex<(StorageRefund, u32)>>>,
 }
 
 /// TestingTracer interprets valid x values in `add x r0 r0` and `ptr.add x r0 r0` instructions as commands to execute.
@@ -103,7 +109,7 @@ pub struct TestingTracer<const N: usize = 8, E: VmEncodingMode<N> = EncodingMode
 /// "PRINT_REG_PREFIX:" - print raw "x" value of next command in the console
 /// "PRINT_PTR_PREFIX:" - print raw "x" pointer value of next command in the console (currently same result as previous command)
 impl<const N: usize, E: VmEncodingMode<N>> TestingTracer<N, E> {
-    pub fn new(test_refund_register_val: Option<Arc<Mutex<(u32, u32)>>>) -> Self {
+    pub fn new(test_refund_register_val: Option<Arc<Mutex<(StorageRefund, u32)>>>) -> Self {
         Self {
             exception: None,
             tracer_state: TracerState::default(),
@@ -145,6 +151,38 @@ impl<const N: usize, E: VmEncodingMode<N>> TestingTracer<N, E> {
         }
     }
 
+    fn set_storage_refund(
+        &self,
+        storage_refund_type: StorageRefund,
+        value: Option<PrimitiveValue>,
+    ) {
+        if let Some(val) = &self.test_refund_register_val {
+            match storage_refund_type {
+                StorageRefund::Cold => (val.lock().unwrap()).0 = StorageRefund::Cold,
+                StorageRefund::Warm => {
+                    let warm_refund_regex = Regex::new(r#"W:(\d*)"#).expect("Invalid regex");
+                    let value = value.expect("Refund value should be present").value;
+                    let mut bytes = [0u8; 32];
+                    value.to_big_endian(&mut bytes);
+                    let decoded_str = std::str::from_utf8(&bytes)
+                        .unwrap_or_else(|_| panic!("Unable to decode refund"));
+                    let args = warm_refund_regex
+                        .captures(decoded_str)
+                        .expect("Malformed refund");
+
+                    if args.len() < 2 {
+                        panic!("Missing refund amount");
+                    }
+
+                    let refund_value =
+                        u32::from_str_radix(&args[1], 10).expect("Refund parsing error");
+
+                    *val.lock().unwrap() = (StorageRefund::Warm, refund_value);
+                }
+            }
+        }
+    }
+
     fn handle_value_from_vm(&mut self, value: PrimitiveValue) -> TracerState {
         let mut new_state = TracerState::ExpectingCommand;
         let mut new_message_buffer_value = None;
@@ -176,6 +214,12 @@ impl<const N: usize, E: VmEncodingMode<N>> TestingTracer<N, E> {
                             new_state =
                                 TracerState::ExpectingValueToPrint(ExpectedValueType::Pointer);
                         }
+                        STORAGE_REFUND_COLD_PREFIX => {
+                            self.set_storage_refund(StorageRefund::Cold, None);
+                        }
+                        STORAGE_REFUND_WARM_PREFIX => {
+                            self.set_storage_refund(StorageRefund::Warm, Some(value));
+                        }
                         _ => {
                             // ignore invalid command
                         }
@@ -206,6 +250,8 @@ impl<const N: usize, E: VmEncodingMode<N>> TestingTracer<N, E> {
                 PRINT_PREFIX,
                 PRINT_REG_PREFIX,
                 PRINT_PTR_PREFIX,
+                STORAGE_REFUND_COLD_PREFIX,
+                STORAGE_REFUND_WARM_PREFIX,
             ] {
                 if message_trimmed.starts_with(prefix) {
                     let arg = message_trimmed.strip_prefix(prefix).unwrap();
@@ -271,27 +317,10 @@ impl<const N: usize, E: VmEncodingMode<N>> Tracer<N, E> for TestingTracer<N, E> 
 
     fn before_execution(
         &mut self,
-        state: VmLocalStateData<'_, N, E>,
+        _state: VmLocalStateData<'_, N, E>,
         data: BeforeExecutionData<N, E>,
         _memory: &Self::SupportedMemory,
     ) {
-        let reg_14_val = state
-            .vm_local_state
-            .registers
-            .get(REGISTERS_COUNT - 2)
-            .unwrap()
-            .value;
-
-        let reg_15_val = state.vm_local_state.registers.last().unwrap().value;
-
-        if let Some(val) = &self.test_refund_register_val {
-            *val.lock().unwrap() = if reg_15_val > U256::from(u32::MAX) {
-                (reg_14_val.as_u32(), u32::MAX)
-            } else {
-                (reg_14_val.as_u32(), reg_15_val.as_u32())
-            };
-        }
-
         let inner_opcode = data.opcode.inner.variant.opcode;
 
         // Propagate error message if Nop, ret.panic, ret.revert; reset otherwise

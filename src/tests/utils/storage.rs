@@ -28,6 +28,7 @@ use crate::ethereum_types::U256;
 use super::{
     preprocess_asm::{EXCEPTION_PREFIX, PRINT_PREFIX, PRINT_PTR_PREFIX, PRINT_REG_PREFIX},
     testing_tracer::{OutOfCircuitException, TestingTracer},
+    StorageRefund,
 };
 
 #[derive(Debug, Clone)]
@@ -37,11 +38,11 @@ pub struct InMemoryCustomRefundStorage {
     pub cold_warm_markers: [HashMap<Address, HashSet<U256>>; NUM_SHARDS],
     pub transient_cold_warm_markers: [HashMap<Address, HashSet<U256>>; NUM_SHARDS], // not used
     pub frames_stack: Vec<ApplicationData<LogQuery>>,
-    pub slot_refund: Option<Arc<Mutex<(u32, u32)>>>,
+    pub slot_refund: Option<Arc<Mutex<(StorageRefund, u32)>>>,
 }
 
 impl InMemoryCustomRefundStorage {
-    pub fn new(slot_refund: Option<Arc<Mutex<(u32, u32)>>>) -> Self {
+    pub fn new(slot_refund: Option<Arc<Mutex<(StorageRefund, u32)>>>) -> Self {
         Self {
             inner: [(); NUM_SHARDS].map(|_| HashMap::default()),
             inner_transient: [(); NUM_SHARDS].map(|_| HashMap::default()),
@@ -71,12 +72,11 @@ impl Storage for InMemoryCustomRefundStorage {
         match &self.slot_refund {
             None => StorageAccessRefund::Cold,
             Some(val) => {
-                let (is_warm, val) = *val.lock().unwrap();
+                let (refund_type, val) = *val.lock().unwrap();
 
-                if is_warm == 0 {
-                    dbg!(StorageAccessRefund::Cold)
-                } else {
-                    dbg!(StorageAccessRefund::Warm { ergs: val })
+                match refund_type {
+                    StorageRefund::Cold => dbg!(StorageAccessRefund::Cold),
+                    StorageRefund::Warm => dbg!(StorageAccessRefund::Warm { ergs: val }),
                 }
             }
         }

@@ -25,6 +25,7 @@ use crate::zkevm_circuits::main_vm::main_vm_entry_point;
 use circuit_definitions::aux_definitions::witness_oracle::VmWitnessOracle;
 use circuit_definitions::zk_evm::vm_state::cycle;
 use utils::storage::InMemoryCustomRefundStorage;
+use utils::StorageRefund;
 use zkevm_assembly::Assembly;
 
 #[test]
@@ -252,7 +253,7 @@ pub(crate) fn run_with_options(entry_point_bytecode: Vec<[u8; 32]>, options: Opt
     // We must pass a correct empty code hash (with proper version) into the run method.
     let empty_code_hash = U256::from_big_endian(&bytecode_to_code_hash(&[[0; 32]]).unwrap());
 
-    let slot_refund = Arc::new(Mutex::new((0u32, 0u32)));
+    let slot_refund = Arc::new(Mutex::new((StorageRefund::Cold, 0u32)));
     let mut storage_impl = InMemoryCustomRefundStorage::new(Some(slot_refund.clone()));
 
     let mut tree = ZKSyncTestingTree::empty();
