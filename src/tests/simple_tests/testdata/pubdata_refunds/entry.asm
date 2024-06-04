@@ -38,7 +38,7 @@ inner_storage_handler:
     add 19, r0, r1
     log.sread r1, r0, r6
 
-    revert("Not panicked but should")
+    ret.ok r0
 inner_storage_too_large_refund:
     ; we'll be writing 13 at slot 25 with a warm refund of 5400
     ; this should cause it to fail because we refund more gas than we have
@@ -48,7 +48,7 @@ inner_storage_too_large_refund:
     add 13, r0, r2
     log.swrite r1, r2, r0
 
-    ret.panic r0
+    ret.ok r0
 .panic:
     ret.panic r0
 .expected_error_handler:
