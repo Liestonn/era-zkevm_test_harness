@@ -151,31 +151,13 @@ impl<const N: usize, E: VmEncodingMode<N>> TestingTracer<N, E> {
         }
     }
 
-    fn set_storage_refund(
-        &self,
-        storage_refund_type: StorageRefund,
-        value: Option<PrimitiveValue>,
-    ) {
+    fn set_storage_refund(&self, storage_refund_type: StorageRefund, value: &str) {
         if let Some(val) = &self.test_refund_register_val {
             match storage_refund_type {
                 StorageRefund::Cold => (val.lock().unwrap()).0 = StorageRefund::Cold,
                 StorageRefund::Warm => {
-                    let warm_refund_regex = Regex::new(r#"W:(\d*)"#).expect("Invalid regex");
-                    let value = value.expect("Refund value should be present").value;
-                    let mut bytes = [0u8; 32];
-                    value.to_big_endian(&mut bytes);
-                    let decoded_str = std::str::from_utf8(&bytes)
-                        .unwrap_or_else(|_| panic!("Unable to decode refund"));
-                    let args = warm_refund_regex
-                        .captures(decoded_str)
-                        .expect("Malformed refund");
-
-                    if args.len() < 2 {
-                        panic!("Missing refund amount");
-                    }
-
                     let refund_value =
-                        u32::from_str_radix(&args[1], 10).expect("Refund parsing error");
+                        u32::from_str_radix(value, 10).expect("Refund parsing error");
 
                     *val.lock().unwrap() = (StorageRefund::Warm, refund_value);
                 }
@@ -215,10 +197,10 @@ impl<const N: usize, E: VmEncodingMode<N>> TestingTracer<N, E> {
                                 TracerState::ExpectingValueToPrint(ExpectedValueType::Pointer);
                         }
                         STORAGE_REFUND_COLD_PREFIX => {
-                            self.set_storage_refund(StorageRefund::Cold, None);
+                            self.set_storage_refund(StorageRefund::Cold, &arg);
                         }
                         STORAGE_REFUND_WARM_PREFIX => {
-                            self.set_storage_refund(StorageRefund::Warm, Some(value));
+                            self.set_storage_refund(StorageRefund::Warm, &arg);
                         }
                         _ => {
                             // ignore invalid command
