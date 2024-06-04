@@ -1,6 +1,4 @@
-use std::borrow::BorrowMut;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 
 use super::*;
 use crate::entry_point::create_out_of_circuit_global_context;
@@ -252,8 +250,7 @@ pub(crate) fn run_with_options(entry_point_bytecode: Vec<[u8; 32]>, options: Opt
     // We must pass a correct empty code hash (with proper version) into the run method.
     let empty_code_hash = U256::from_big_endian(&bytecode_to_code_hash(&[[0; 32]]).unwrap());
 
-    let slot_refund = Arc::new(Mutex::new((StorageRefund::Cold, 0u32)));
-    let mut storage_impl = InMemoryCustomRefundStorage::new(Some(slot_refund.clone()));
+    let mut storage_impl = InMemoryCustomRefundStorage::new();
 
     let mut tree = ZKSyncTestingTree::empty();
 
@@ -265,7 +262,7 @@ pub(crate) fn run_with_options(entry_point_bytecode: Vec<[u8; 32]>, options: Opt
     let mut basic_block_circuits = vec![];
 
     // we are using TestingTracer to track prints and exceptions inside out_of_circuit_vm cycles
-    let mut out_of_circuit_tracer = TestingTracer::new(Some(slot_refund));
+    let mut out_of_circuit_tracer = TestingTracer::new(Some(storage_impl.slot_refund.clone()));
 
     if let Err(err) = run_vms(
         Address::zero(),

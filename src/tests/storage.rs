@@ -35,14 +35,21 @@ pub(crate) enum StorageRefund {
 #[derive(Debug, Clone)]
 pub struct InMemoryCustomRefundStorage {
     pub storage: InMemoryStorage,
-    pub slot_refund: Option<Arc<Mutex<(StorageRefund, u32)>>>,
+    pub slot_refund: Arc<Mutex<(StorageRefund, u32)>>,
 }
 
 impl InMemoryCustomRefundStorage {
-    pub fn new(slot_refund: Option<Arc<Mutex<(StorageRefund, u32)>>>) -> Self {
+    pub fn new() -> Self {
         Self {
             storage: InMemoryStorage::new(),
-            slot_refund,
+            slot_refund: Arc::new(
+                Mutex::new(
+                    (
+                        StorageRefund::Cold,
+                        0u32
+                    )
+                )
+            )
         }
     }
 }
@@ -54,16 +61,10 @@ impl Storage for InMemoryCustomRefundStorage {
         _monotonic_cycle_counter: u32,
         _partial_query: &LogQuery,
     ) -> StorageAccessRefund {
-        match &self.slot_refund {
-            None => StorageAccessRefund::Cold,
-            Some(val) => {
-                let (refund_type, val) = *val.lock().unwrap();
-
-                match refund_type {
-                    StorageRefund::Cold => dbg!(StorageAccessRefund::Cold),
-                    StorageRefund::Warm => dbg!(StorageAccessRefund::Warm { ergs: val }),
-                }
-            }
+        let storage_refund = &self.slot_refund.lock().unwrap();
+        match storage_refund.0 {
+            StorageRefund::Cold => dbg!(StorageAccessRefund::Cold),
+            StorageRefund::Warm => dbg!(StorageAccessRefund::Warm { ergs: storage_refund.1 }),
         }
     }
 
