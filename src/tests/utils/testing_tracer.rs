@@ -14,7 +14,6 @@ use zkevm_assembly::zkevm_opcode_defs::NopOpcode;
 use zkevm_assembly::zkevm_opcode_defs::Opcode;
 use zkevm_assembly::zkevm_opcode_defs::PtrOpcode;
 use zkevm_assembly::zkevm_opcode_defs::RetOpcode;
-use zkevm_assembly::zkevm_opcode_defs::REGISTERS_COUNT;
 
 use crate::ethereum_types::U256;
 use crate::tests::storage::RefundController;
