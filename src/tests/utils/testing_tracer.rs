@@ -2,11 +2,8 @@ use circuit_definitions::boojum::utils::PipeOp;
 use circuit_definitions::ethereum_types::H160;
 use circuit_definitions::zk_evm::vm_state::ErrorFlags;
 use circuit_definitions::zk_evm::vm_state::PrimitiveValue;
-use regex::Regex;
 use std::fmt;
 use std::str;
-use std::sync::Arc;
-use std::sync::Mutex;
 use std::usize;
 use zkevm_assembly::zkevm_opcode_defs::decoding::{
     AllowedPcOrImm, EncodingModeProduction, VmEncodingMode,
@@ -20,6 +17,7 @@ use zkevm_assembly::zkevm_opcode_defs::RetOpcode;
 use zkevm_assembly::zkevm_opcode_defs::REGISTERS_COUNT;
 
 use crate::ethereum_types::U256;
+use crate::tests::storage::RefundController;
 use crate::tests::storage::StorageRefund;
 use crate::zk_evm::reference_impls::memory::SimpleMemory;
 use crate::zk_evm::tracing::*;
@@ -28,9 +26,8 @@ use crate::tests::utils::preprocess_asm::EXCEPTION_PREFIX;
 use crate::tests::utils::preprocess_asm::PRINT_PREFIX;
 use crate::tests::utils::preprocess_asm::PRINT_PTR_PREFIX;
 use crate::tests::utils::preprocess_asm::PRINT_REG_PREFIX;
-
-use super::preprocess_asm::STORAGE_REFUND_COLD_PREFIX;
-use super::preprocess_asm::STORAGE_REFUND_WARM_PREFIX;
+use crate::tests::utils::preprocess_asm::STORAGE_REFUND_COLD_PREFIX;
+use crate::tests::utils::preprocess_asm::STORAGE_REFUND_WARM_PREFIX;
 
 #[derive(Debug, Clone, PartialEq, Default)]
 enum TracerState {
@@ -97,8 +94,8 @@ pub struct TestingTracer<const N: usize = 8, E: VmEncodingMode<N> = EncodingMode
     tracer_state: TracerState,
     /// stores pending messages that should be printed
     message_buffer: Option<String>,
-    /// Optional values pulled from assembly code denoting the storage refund and amount
-    test_refund_register_val: Option<Arc<Mutex<(StorageRefund, u32)>>>,
+    /// Optional controller to set the type/amount of refund for storage slot access
+    storage_refund_controller: Option<RefundController>,
 }
 
 /// TestingTracer interprets valid x values in `add x r0 r0` and `ptr.add x r0 r0` instructions as commands to execute.
@@ -108,13 +105,17 @@ pub struct TestingTracer<const N: usize = 8, E: VmEncodingMode<N> = EncodingMode
 /// "PRINT_PREFIX:<text>" - print <text> in the console
 /// "PRINT_REG_PREFIX:" - print raw "x" value of next command in the console
 /// "PRINT_PTR_PREFIX:" - print raw "x" pointer value of next command in the console (currently same result as previous command)
+/// "STORAGE_REFUND_COLD_PREFIX:" - If used in conjuction with RefundController from InMemoryCustomRefundStorage::create_refund_controller will set the next
+///                                 storage slot access refund to Cold
+/// STORAGE_REFUND_WARM_PREFIX:<u32> - If used in conjuction with RefundController from InMemoryCustomRefundStorage::create_refund_controller will set the next
+///                                    storage slot access refund to Warm with the specified amount of ergs
 impl<const N: usize, E: VmEncodingMode<N>> TestingTracer<N, E> {
-    pub fn new(test_refund_register_val: Option<Arc<Mutex<(StorageRefund, u32)>>>) -> Self {
+    pub fn new(storage_refund_controller: Option<RefundController>) -> Self {
         Self {
             exception: None,
             tracer_state: TracerState::default(),
             message_buffer: None,
-            test_refund_register_val,
+            storage_refund_controller,
         }
     }
 
@@ -152,14 +153,14 @@ impl<const N: usize, E: VmEncodingMode<N>> TestingTracer<N, E> {
     }
 
     fn set_storage_refund(&self, storage_refund_type: StorageRefund, value: &str) {
-        if let Some(val) = &self.test_refund_register_val {
+        if let Some(controller) = &self.storage_refund_controller {
             match storage_refund_type {
-                StorageRefund::Cold => (val.lock().unwrap()).0 = StorageRefund::Cold,
+                StorageRefund::Cold => controller.set_storage_refund(StorageRefund::Cold, 0u32),
                 StorageRefund::Warm => {
                     let refund_value =
                         u32::from_str_radix(value, 10).expect("Refund parsing error");
 
-                    *val.lock().unwrap() = (StorageRefund::Warm, refund_value);
+                    controller.set_storage_refund(StorageRefund::Warm, refund_value);
                 }
             }
         }

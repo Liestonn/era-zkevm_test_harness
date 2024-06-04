@@ -1,29 +1,10 @@
-use std::{
-    collections::{HashMap, HashSet},
-    sync::{Arc, Mutex},
-};
+use std::{cell::RefCell, rc::Rc};
 
-use circuit_definitions::{
-    ethereum_types::{Address, H160},
-    zk_evm::{
-        abstractions::{Storage, StorageAccessRefund},
-        aux_structures::{LogQuery, PubdataCost, Timestamp},
-        reference_impls::{event_sink::ApplicationData, memory::SimpleMemory},
-        testing::{storage::InMemoryStorage, NUM_SHARDS},
-        tracing::{
-            AfterDecodingData, AfterExecutionData, BeforeExecutionData, Tracer, VmLocalStateData,
-        },
-        vm_state::PrimitiveValue,
-    },
+use circuit_definitions::zk_evm::{
+    abstractions::{Storage, StorageAccessRefund},
+    aux_structures::{LogQuery, PubdataCost, Timestamp},
+    testing::storage::InMemoryStorage,
 };
-use zkevm_assembly::zkevm_opcode_defs::{
-    decoding::{AllowedPcOrImm, EncodingModeProduction, VmEncodingMode},
-    AddOpcode, DecodedOpcode, NopOpcode, Opcode, PtrOpcode, RetOpcode, MAX_PUBDATA_COST_PER_QUERY,
-    STORAGE_ACCESS_COLD_READ_COST, STORAGE_ACCESS_COLD_WRITE_COST, STORAGE_ACCESS_WARM_READ_COST,
-    STORAGE_ACCESS_WARM_WRITE_COST, STORAGE_AUX_BYTE, TRANSIENT_STORAGE_AUX_BYTE,
-};
-
-use crate::ethereum_types::U256;
 
 /// Enum holding the types of storage refunds
 #[derive(Debug, Copy, Clone)]
@@ -32,18 +13,45 @@ pub(crate) enum StorageRefund {
     Warm,
 }
 
+/// Used to control updates to the slot refunds within InMemoryCustomRefundStorage
+#[derive(Debug, Clone)]
+pub struct RefundController {
+    slot_refund: Rc<RefCell<(StorageRefund, u32)>>,
+}
+
+impl RefundController {
+    pub fn new(slot_refund: Rc<RefCell<(StorageRefund, u32)>>) -> Self {
+        Self { slot_refund }
+    }
+
+    pub fn set_storage_refund(&self, storage_refund_type: StorageRefund, refund_value: u32) {
+        let new_value = if let StorageRefund::Warm = storage_refund_type {
+            refund_value
+        } else {
+            0
+        };
+        *self.slot_refund.borrow_mut() = (storage_refund_type, new_value);
+    }
+}
+
+/// Wrapper around the base InMemoryStorage implementation that allows for the setting of custom refunds for more
+/// control over storage slot refund testing.
 #[derive(Debug, Clone)]
 pub struct InMemoryCustomRefundStorage {
     pub storage: InMemoryStorage,
-    pub slot_refund: Arc<Mutex<(StorageRefund, u32)>>,
+    pub slot_refund: Rc<RefCell<(StorageRefund, u32)>>,
 }
 
 impl InMemoryCustomRefundStorage {
     pub fn new() -> Self {
         Self {
             storage: InMemoryStorage::new(),
-            slot_refund: Arc::new(Mutex::new((StorageRefund::Cold, 0u32))),
+            slot_refund: Rc::new(RefCell::new((StorageRefund::Cold, 0u32))),
         }
+    }
+
+    pub fn create_refund_controller(&self) -> RefundController {
+        RefundController::new(Rc::clone(&self.slot_refund))
     }
 }
 
@@ -54,7 +62,7 @@ impl Storage for InMemoryCustomRefundStorage {
         _monotonic_cycle_counter: u32,
         _partial_query: &LogQuery,
     ) -> StorageAccessRefund {
-        let storage_refund = &self.slot_refund.lock().unwrap();
+        let storage_refund = self.slot_refund.borrow();
         match storage_refund.0 {
             StorageRefund::Cold => dbg!(StorageAccessRefund::Cold),
             StorageRefund::Warm => dbg!(StorageAccessRefund::Warm {

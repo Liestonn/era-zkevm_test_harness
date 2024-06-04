@@ -262,7 +262,8 @@ pub(crate) fn run_with_options(entry_point_bytecode: Vec<[u8; 32]>, options: Opt
     let mut basic_block_circuits = vec![];
 
     // we are using TestingTracer to track prints and exceptions inside out_of_circuit_vm cycles
-    let mut out_of_circuit_tracer = TestingTracer::new(Some(storage_impl.slot_refund.clone()));
+    let mut out_of_circuit_tracer =
+        TestingTracer::new(Some(storage_impl.create_refund_controller()));
 
     if let Err(err) = run_vms(
         Address::zero(),

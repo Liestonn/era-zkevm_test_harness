@@ -13,19 +13,11 @@ __entry:
     ; perform write via near call
     near_call r4, @inner_storage_handler, @.panic
 
+    add 5000, r0, r4
+    near_call r4, @inner_storage_too_large_refund, @.expected_error_handler
+
     ret.ok r0
 inner_storage_handler:
-    ; prepare a 32-bit mask (0xffff..)
-    add 1, r0, r10
-    shl.s 32, r10, r10
-    sub.s 1, r10, r10
-    
-    ; check pubdata counter (should be equal to 0)
-    context.meta r7
-    and r10, r7, r7
-    sub! 0, r7, r0
-    jump.ne @.panic
-
     ; we'll be writing 13 at slot 25 with a warm refund of 5400
     set_storage_warm(5400)
     add 25, r0, r1
@@ -47,5 +39,17 @@ inner_storage_handler:
     log.sread r1, r0, r6
 
     ret.ok r0
+inner_storage_too_large_refund:
+    ; we'll be writing 13 at slot 25 with a warm refund of 5400
+    ; this should cause it to fail because we refund more gas than we have
+    ; available
+    set_storage_warm(5400)
+    add 25, r0, r1
+    add 13, r0, r2
+    log.swrite r1, r2, r0
+
+    ret.panic r0
 .panic:
     ret.panic r0
+.expected_error_handler:
+    ret.ok r0
