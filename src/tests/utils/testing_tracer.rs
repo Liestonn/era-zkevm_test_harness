@@ -20,6 +20,7 @@ use zkevm_assembly::zkevm_opcode_defs::RetOpcode;
 use zkevm_assembly::zkevm_opcode_defs::REGISTERS_COUNT;
 
 use crate::ethereum_types::U256;
+use crate::tests::storage::StorageRefund;
 use crate::zk_evm::reference_impls::memory::SimpleMemory;
 use crate::zk_evm::tracing::*;
 
@@ -30,7 +31,6 @@ use crate::tests::utils::preprocess_asm::PRINT_REG_PREFIX;
 
 use super::preprocess_asm::STORAGE_REFUND_COLD_PREFIX;
 use super::preprocess_asm::STORAGE_REFUND_WARM_PREFIX;
-use super::StorageRefund;
 
 #[derive(Debug, Clone, PartialEq, Default)]
 enum TracerState {
