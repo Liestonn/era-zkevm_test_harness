@@ -42,14 +42,7 @@ impl InMemoryCustomRefundStorage {
     pub fn new() -> Self {
         Self {
             storage: InMemoryStorage::new(),
-            slot_refund: Arc::new(
-                Mutex::new(
-                    (
-                        StorageRefund::Cold,
-                        0u32
-                    )
-                )
-            )
+            slot_refund: Arc::new(Mutex::new((StorageRefund::Cold, 0u32))),
         }
     }
 }
@@ -64,7 +57,9 @@ impl Storage for InMemoryCustomRefundStorage {
         let storage_refund = &self.slot_refund.lock().unwrap();
         match storage_refund.0 {
             StorageRefund::Cold => dbg!(StorageAccessRefund::Cold),
-            StorageRefund::Warm => dbg!(StorageAccessRefund::Warm { ergs: storage_refund.1 }),
+            StorageRefund::Warm => dbg!(StorageAccessRefund::Warm {
+                ergs: storage_refund.1
+            }),
         }
     }
 
