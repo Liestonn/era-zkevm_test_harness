@@ -22,6 +22,7 @@ use crate::zkevm_circuits::base_structures::vm_state::GlobalContextWitness;
 use crate::zkevm_circuits::main_vm::main_vm_entry_point;
 use circuit_definitions::aux_definitions::witness_oracle::VmWitnessOracle;
 use circuit_definitions::zk_evm::vm_state::cycle;
+use storage::{InMemoryCustomRefundStorage, StorageRefund};
 use zkevm_assembly::Assembly;
 
 #[test]
@@ -213,10 +214,10 @@ pub(crate) fn run_and_try_create_witness_for_extended_state(
 }
 
 pub(crate) fn run_with_options(entry_point_bytecode: Vec<[u8; 32]>, options: Options) {
-    use crate::external_calls::run;
-    use crate::zk_evm::zkevm_opcode_defs::system_params::BOOTLOADER_FORMAL_ADDRESS;
-
+    use crate::run_vms::{run_vms, RunVmError};
+    use crate::tests::utils::testing_tracer::TestingTracer;
     use crate::toolset::GeometryConfig;
+    use crate::zk_evm::zkevm_opcode_defs::system_params::BOOTLOADER_FORMAL_ADDRESS;
 
     let geometry = GeometryConfig {
         cycles_per_vm_snapshot: options.cycles_per_vm_snapshot,
@@ -249,16 +250,22 @@ pub(crate) fn run_with_options(entry_point_bytecode: Vec<[u8; 32]>, options: Opt
     // We must pass a correct empty code hash (with proper version) into the run method.
     let empty_code_hash = U256::from_big_endian(&bytecode_to_code_hash(&[[0; 32]]).unwrap());
 
-    let mut storage_impl = InMemoryStorage::new();
+    let mut storage_impl = InMemoryCustomRefundStorage::new();
+
     let mut tree = ZKSyncTestingTree::empty();
 
     let mut known_contracts = HashMap::new();
     known_contracts.extend(options.other_contracts.iter().cloned());
 
-    save_predeployed_contracts(&mut storage_impl, &mut tree, &known_contracts);
+    save_predeployed_contracts(&mut storage_impl.storage, &mut tree, &known_contracts);
 
     let mut basic_block_circuits = vec![];
-    run(
+
+    // we are using TestingTracer to track prints and exceptions inside out_of_circuit_vm cycles
+    let mut out_of_circuit_tracer =
+        TestingTracer::new(Some(storage_impl.create_refund_controller()));
+
+    if let Err(err) = run_vms(
         Address::zero(),
         *BOOTLOADER_FORMAL_ADDRESS,
         entry_point_bytecode,
@@ -276,7 +283,23 @@ pub(crate) fn run_with_options(entry_point_bytecode: Vec<[u8; 32]>, options: Opt
         std::array::from_fn(|_| None),
         |circuit| basic_block_circuits.push(circuit),
         |_, _, _| {},
-    );
+        &mut out_of_circuit_tracer,
+    ) {
+        let error_text = match err {
+            RunVmError::InvalidInput(msg) => {
+                format!("Invalid input error: {msg}")
+            }
+            RunVmError::OutOfCircuitExecutionError(msg) => {
+                let msg = if let Some(exception) = out_of_circuit_tracer.exception {
+                    format!("{msg} {exception}")
+                } else {
+                    msg
+                };
+                format!("Out-of-circuit execution error: {msg}")
+            }
+        };
+        panic!("{error_text}");
+    }
 
     println!("Simulation and witness creation are completed");
 
